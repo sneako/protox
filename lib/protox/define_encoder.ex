@@ -6,6 +6,7 @@ defmodule Protox.DefineEncoder do
     {keep_unknown_fields, _opts} = Keyword.pop(opts, :keep_unknown_fields, true)
 
     {oneofs, fields_without_oneofs} = Protox.Defs.split_oneofs(fields)
+    IO.inspect(oneofs, label: :oneofs)
 
     encode_fun = make_encode_fun(oneofs, fields_without_oneofs, keep_unknown_fields)
     encode_oneof_funs = make_encode_oneof_funs(oneofs)
@@ -89,6 +90,8 @@ defmodule Protox.DefineEncoder do
 
   defp make_encode_oneof_funs(oneofs) do
     for {parent_name, children} <- oneofs do
+      IO.inspect(children, label: :children)
+
       nil_case =
         quote do
           nil -> acc
@@ -106,17 +109,21 @@ defmodule Protox.DefineEncoder do
            end)
            |> List.flatten())
 
+      parent_access_name = parent_access_name(parent_name, children)
       encode_parent_fun_name = String.to_atom("encode_#{parent_name}")
 
       quote do
         defp unquote(encode_parent_fun_name)(acc, msg) do
-          case msg.unquote(parent_name) do
+          case msg.unquote(parent_access_name) do
             unquote(children_case_ast)
           end
         end
       end
     end
   end
+
+  defp parent_access_name(_, [{_, :proto3_optional, name, _, _}]), do: name
+  defp parent_access_name(parent, _), do: parent
 
   defp make_encode_field_funs(fields, required_fields, syntax) do
     for {tag, _, name, kind, type} <- fields do
@@ -170,7 +177,8 @@ defmodule Protox.DefineEncoder do
   end
 
   # Generate the AST to encode child `_child_name` of oneof `parent_field`
-  defp make_encode_field_body({:oneof, parent_field}, tag, _child_name, type, _required, _syntax) do
+  defp make_encode_field_body({:oneof, parent_field}, tag, child_name, type, _required, _syntax) do
+    IO.inspect(child: child_name, parent: parent_field, label: :oneof)
     key = Protox.Encode.make_key_bytes(tag, type)
     var = quote do: field_value
     encode_value_ast = get_encode_value_body(type, var)
